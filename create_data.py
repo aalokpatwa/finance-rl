@@ -43,7 +43,7 @@ def generate_sample(data: dict, derived_metrics: List[str]) -> str:
     num_years_required: int = get_number_of_years_required(choice_of_metric)
     
     possible_years: List[int] = get_years(data)
-    years: List[int] = random.sample(possible_years, num_years_required)
+    years: List[int] = sorted(random.sample(possible_years, num_years_required))
     
     question_str: str = f"Calculate {choice_of_metric}"
     
@@ -81,9 +81,11 @@ def main():
     # Generate the samples
     for _ in range(num_train_samples + num_test_samples):
         
+        # Generate a new income / balance sheet for each example
+        
+        # Defines the number of years to include in the data
         number_of_years = random.randint(2, 6)
         starting_year = random.randint(2000, 2024 - number_of_years + 1)
-        
         years: List[int] = [starting_year + i for i in range(number_of_years)]
         
         data: dict = {
@@ -94,6 +96,7 @@ def main():
             for year in years
         }
         
+        # Generate a target calculation for the given data
         sample: dict = generate_sample(data, derived_metrics)
         if len(train_samples) < num_train_samples:
             train_samples.append(sample)

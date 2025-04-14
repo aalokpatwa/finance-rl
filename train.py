@@ -2,6 +2,8 @@
 Implementation of GRPO, DeepSeek style training without external libraries 
 """
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import json
 import torch
 import argparse
@@ -9,7 +11,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from transformers import PreTrainedModel, PreTrainedTokenizerBase, GenerationConfig
 
-import llms
+import llm
 import utils
 import evaluator
 import dataloader
@@ -18,7 +20,7 @@ def eval_on_test_set(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
     test_loader: dataloader.FinanceLoader,
-    eval_class: evaluator.RewardEvaluator,
+    eval_class: evaluator.FinanceEvaluator,
     device: str,
     args: argparse.Namespace,
     round_num: int
@@ -192,7 +194,7 @@ def score_completions(
     completions_text: list[str],
     question: str,
     answer: str,
-    eval_class: evaluator.RewardEvaluator,
+    eval_class: evaluator.FinanceEvaluator,
     device: str,
     args: argparse.Namespace
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict[str, float], dict]:
@@ -331,7 +333,7 @@ def grpo_loss(
         tokenizer: PreTrainedTokenizerBase,
         question: str,
         answer: str,
-        eval_class: evaluator.RewardEvaluator,
+        eval_class: evaluator.FinanceEvaluator,
         device: str,
         round_num: int,
         training_log_dir: str, 
@@ -388,7 +390,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="GRPO training arguments")
     
     # Model configuration
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="Name/path of base model")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-1.5B-Instruct", help="Name/path of base model")
+    parser.add_argument("--load_in_4bit", action="store_true", help="Load model in 4-bit using bitsandbytes") # Added argument
 
     # Output and logging
     parser.add_argument("--output_dir", type=str, default="output", help="Directory to save outputs")
@@ -397,7 +400,7 @@ def parse_args():
     parser.add_argument("--eval_iterations", type=int, default=20, help="Number of iterations for evaluation")
 
     # Optimization hyperparameters
-    parser.add_argument("--learning_rate", type=float, default=5e-6, help="Learning rate")
+    parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="Adam beta1")
     parser.add_argument("--adam_beta2", type=float, default=0.99, help="Adam beta2") 
     parser.add_argument("--weight_decay", type=float, default=0.1, help="Weight decay")
@@ -410,10 +413,10 @@ def parse_args():
 
 
     # Generation parameters
-    parser.add_argument("--temperature", type=float, default=0.9, help="Sampling temperature")
-    parser.add_argument("--num_chains", type=int, default=16, help="Number of parallel generation chains")
-    parser.add_argument("--max_prompt_length", type=int, default=256, help="Maximum prompt length")
-    parser.add_argument("--max_completion_length", type=int, default=786, help="Maximum completion length")
+    parser.add_argument("--temperature", type=float, default=0.5, help="Sampling temperature")
+    parser.add_argument("--num_chains", type=int, default=4, help="Number of parallel generation chains")
+    parser.add_argument("--max_prompt_length", type=int, default=1024, help="Maximum prompt length")
+    parser.add_argument("--max_completion_length", type=int, default=2048, help="Maximum completion length")
 
     # Training parameters
     parser.add_argument("--num_train_iters", type=int, default=1000, help="Number of training iterations")
@@ -441,14 +444,17 @@ if __name__ == "__main__":
     ###############################
 
     ## Set which model to train 
-    model, tokenizer = llms.get_llm_tokenizer(args.model_name, device)
-    base_model, _ = llms.get_llm_tokenizer(args.model_name, device)
+    model, tokenizer = llm.get_llm_tokenizer(args.model_name, device, args.load_in_4bit)
+    base_model, _ = llm.get_llm_tokenizer(args.model_name, device, args.load_in_4bit)
+    
+    # Set the padding side
+    tokenizer.padding_side = "left"
 
     ## Set which data set 
-    train_loader, test_loader = dataloader.get_dataloaders()
+    train_loader, test_loader = dataloader.get_dataloaders("gsm8k")
 
     ## Set which evaluation criteria to use 
-    eval_class = evaluator.FinanceEvaluator()
+    eval_class = evaluator.GSM8kEvaluator()
 
     ###############################
 
@@ -540,4 +546,3 @@ if __name__ == "__main__":
         train_metrics_total[round_num] = train_metrics
         with open(os.path.join(train_log_dir, "train_logs.json"), "w") as f:
             json.dump(train_metrics_total, f, indent=4)
-       
