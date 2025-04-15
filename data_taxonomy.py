@@ -17,12 +17,14 @@ class MetricDefinition:
         formula: Union[MetricFunction, None] = None, 
         level: str = "easy",
         reasoning: ReasoningFunction = None,
+        units: str = "",
     ):
         self.metric_type = metric_type
         self.required = required
         self.formula = formula
         self.level = level
         self.reasoning = reasoning
+        self.units = units
 
 # Hardcoded taxonomy for how line items should tie together
 METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
@@ -35,7 +37,7 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
     "Depreciation Expense": MetricDefinition(metric_type="basic"),
     "Interest Expense": MetricDefinition(metric_type="basic"),
     "Income Tax Expense": MetricDefinition(metric_type="basic"),
-    "Tax Rate": MetricDefinition(metric_type="basic"),
+    "Tax Rate": MetricDefinition(metric_type="basic", units="%"),
     
     # Derived income statement metrics
     "Gross Income": MetricDefinition(
@@ -76,7 +78,8 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
             (data[year2]["Revenue"] - data[year1]["Revenue"]) / data[year1]["Revenue"] * 100
         ),
         level="easy",
-        reasoning=lambda data, year1, year2: f"{year2} Revenue Growth is calculated by subtracting {year1} Revenue from {year2} Revenue, then dividing by {year1} Revenue and multiplying by 100." + get_metric_reasoning("Revenue", data, year1) + get_metric_reasoning("Revenue", data, year2)
+        reasoning=lambda data, year1, year2: f"{year2} Revenue Growth is calculated by subtracting {year1} Revenue from {year2} Revenue, then dividing by {year1} Revenue and multiplying by 100." + get_metric_reasoning("Revenue", data, year1) + get_metric_reasoning("Revenue", data, year2),
+        units="%",
     ),
 
     # Margin metrics
@@ -84,19 +87,22 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
         metric_type="derived",
         formula=lambda data, year: (data[year]["Revenue"] - data[year]["Cost of Goods Sold"]) / data[year]["Revenue"] * 100,
         level="easy",
-        reasoning=lambda data, year: f"{year} Gross Margin is calculated by subtracting {year} Cost of Goods Sold from {year} Revenue, then dividing by {year} Revenue and multiplying by 100." + get_metric_reasoning("Revenue", data, year) + get_metric_reasoning("Cost of Goods Sold", data, year)
+        reasoning=lambda data, year: f"{year} Gross Margin is calculated by subtracting {year} Cost of Goods Sold from {year} Revenue, then dividing by {year} Revenue and multiplying by 100." + get_metric_reasoning("Revenue", data, year) + get_metric_reasoning("Cost of Goods Sold", data, year),
+        units="%",
     ),
     "Operating Margin": MetricDefinition(
         metric_type="derived",
         formula=lambda data, year: get_metric("Operating Income", data, year) / data[year]["Revenue"] * 100,
         level="easy",
-        reasoning=lambda data, year: f"{year} Operating Margin is calculated by dividing {year} Operating Income by {year} Revenue and multiplying by 100." + get_metric_reasoning("Operating Income", data, year) + get_metric_reasoning("Revenue", data, year)
+        reasoning=lambda data, year: f"{year} Operating Margin is calculated by dividing {year} Operating Income by {year} Revenue and multiplying by 100." + get_metric_reasoning("Operating Income", data, year) + get_metric_reasoning("Revenue", data, year),
+        units="%",
     ),
     "Net Margin": MetricDefinition(
         metric_type="derived",
         formula=lambda data, year: get_metric("Net Income", data, year) / data[year]["Revenue"] * 100,
         level="medium",
-        reasoning=lambda data, year: f"{year} Net Margin is calculated by dividing {year} Net Income by {year} Revenue and multiplying by 100." + get_metric_reasoning("Net Income", data, year) + get_metric_reasoning("Revenue", data, year)
+        reasoning=lambda data, year: f"{year} Net Margin is calculated by dividing {year} Net Income by {year} Revenue and multiplying by 100." + get_metric_reasoning("Net Income", data, year) + get_metric_reasoning("Revenue", data, year),
+        units="%",
     ),
     
     # Growth-related metrics
@@ -108,7 +114,8 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
             - get_metric("Net Margin", data, year1)
         ),
         level="hard",
-        reasoning=lambda data, year1, year2: f"{year2} Absolute Change in Net Margin is calculated by subtracting {year1} Net Margin from {year2} Net Margin." + get_metric_reasoning("Net Margin", data, year1) + get_metric_reasoning("Net Margin", data, year2)
+        reasoning=lambda data, year1, year2: f"{year2} Absolute Change in Net Margin is calculated by subtracting {year1} Net Margin from {year2} Net Margin." + get_metric_reasoning("Net Margin", data, year1) + get_metric_reasoning("Net Margin", data, year2),
+        units="%",
     ),
     
     # Basic metrics - balance sheet assets
@@ -180,7 +187,8 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
             get_metric("Revenue", data, year) / get_metric("Invested Capital", data, year)
         ),
         level="hard",
-        reasoning=lambda data, year: f"{year} Capital Turnover is calculated by dividing {year} Revenue by {year} Invested Capital." + get_metric_reasoning("Revenue", data, year) + get_metric_reasoning("Invested Capital", data, year)
+        reasoning=lambda data, year: f"{year} Capital Turnover is calculated by dividing {year} Revenue by {year} Invested Capital." + get_metric_reasoning("Revenue", data, year) + get_metric_reasoning("Invested Capital", data, year),
+        units="x"
     ),
     
     "Return on Invested Capital": MetricDefinition(
@@ -189,7 +197,8 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
             get_metric("NOPAT", data, year) / get_metric("Invested Capital", data, year)
         ),
         level="hard",
-        reasoning=lambda data, year: f"{year} Return on Invested Capital is calculated by dividing {year} NOPAT by {year} Invested Capital." + get_metric_reasoning("NOPAT", data, year) + get_metric_reasoning("Invested Capital", data, year)
+        reasoning=lambda data, year: f"{year} Return on Invested Capital is calculated by dividing {year} NOPAT by {year} Invested Capital." + get_metric_reasoning("NOPAT", data, year) + get_metric_reasoning("Invested Capital", data, year),
+        units="%"
     ),
     
     "Quick Ratio": MetricDefinition(
@@ -234,15 +243,15 @@ def get_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> fl
     elif definition.metric_type == "derived":
         # If the formula expects multiple years, pass them in
         # For a standard single-year derived metric, the formula only needs `data, year`.
-        return round(definition.formula(data, year, *args), 2)
+        return round(definition.formula(data, year, *args))
     
 def get_metric_reasoning(metric_name: str, data: dict, year: Union[int, str], *args) -> str:
     definition = METRIC_DEFINITIONS[metric_name]
     
     if definition.reasoning is None or definition.metric_type == "basic":
-        return f"\n{year} {metric_name} is {get_metric(metric_name, data, year, *args)}."
+        return f"\n{year} {metric_name} is {get_metric(metric_name, data, year, *args)}{definition.units}."
     
-    return "\n" + definition.reasoning(data, year, *args) + f"\nTherefore, {metric_name} is {get_metric(metric_name, data, year, *args)}."      
+    return "\n" + definition.reasoning(data, year, *args) + f"\nTherefore, {metric_name} is {get_metric(metric_name, data, year, *args)}{definition.units}."      
             
     
 def get_all_derived_metrics() -> List[str]:

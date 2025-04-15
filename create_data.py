@@ -77,7 +77,7 @@ def main():
     basic_metrics: List[str] = get_all_basic_metrics()
     
     # Get all the derived metrics
-    derived_metrics: List[str] = get_easy_metrics()
+    derived_metrics: List[str] = get_all_derived_metrics()
     
     # Store the generated samples
     train_samples: List[dict] = []
