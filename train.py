@@ -95,11 +95,6 @@ def eval_on_test_set(
     avg_scores = {k: v/num_examples for k,v in total_scores.items()}
     accuracy = total_accuracy / num_examples * 100
 
-    # Save metrics
-    metrics_path = os.path.join(args.output_dir, f'eval_metrics_{round_num}.json')
-    with open(metrics_path, 'w') as f:
-        json.dump({**avg_scores, 'accuracy': accuracy}, f, indent=4)
-
     if args.verbose:
         print("\nEvaluation Results:")
         print("-" * 20)
@@ -392,6 +387,7 @@ def parse_args():
     # Model configuration
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-1.5B-Instruct", help="Name/path of base model")
     parser.add_argument("--load_in_4bit", action="store_true", help="Load model in 4-bit using bitsandbytes") # Added argument
+    parser.add_argument("--dataset", type=str, default="financial", help="Dataset to use")
 
     # Output and logging
     parser.add_argument("--output_dir", type=str, default="output", help="Directory to save outputs")
@@ -400,7 +396,7 @@ def parse_args():
     parser.add_argument("--eval_iterations", type=int, default=20, help="Number of iterations for evaluation")
 
     # Optimization hyperparameters
-    parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate")
+    parser.add_argument("--learning_rate", type=float, default=5e-6, help="Learning rate")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="Adam beta1")
     parser.add_argument("--adam_beta2", type=float, default=0.99, help="Adam beta2") 
     parser.add_argument("--weight_decay", type=float, default=0.1, help="Weight decay")
@@ -451,10 +447,11 @@ if __name__ == "__main__":
     tokenizer.padding_side = "left"
 
     ## Set which data set 
-    train_loader, test_loader = dataloader.get_dataloaders("gsm8k")
+    train_loader, test_loader = dataloader.get_dataloaders(args.dataset)
 
     ## Set which evaluation criteria to use 
-    eval_class = evaluator.GSM8kEvaluator()
+    
+    eval_class = evaluator.get_evaluator(args.dataset)
 
     ###############################
 

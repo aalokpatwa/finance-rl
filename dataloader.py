@@ -184,7 +184,7 @@ def extract_hash_answer(text: str) -> str | None:
     return text.split("####")[1].strip()
 
 def build_finance_dataloaders() -> Tuple[FinanceLoader, FinanceLoader]: 
-    dataset = load_dataset('aalokpatwa/financial-reasoning', split='train')
+    dataset = load_dataset('aalokpatwa/financial-reasoning-easy', split='train')
 
     contexts = []
     questions = []
@@ -200,7 +200,7 @@ def build_finance_dataloaders() -> Tuple[FinanceLoader, FinanceLoader]:
 
     # Randomly split into train/test sets
     total_samples = len(questions)
-    test_size = int(total_samples * 0.001)  # 2% for test set
+    test_size = int(total_samples * 0.01)  # 2% for test set
     
     # Generate random indices for test set
     test_indices = random.sample(range(total_samples), test_size)

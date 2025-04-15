@@ -1,7 +1,10 @@
 import random
 from typing import List
 import json
-from data_taxonomy import get_metric, get_number_of_years_required, get_all_derived_metrics, get_all_basic_metrics
+from data_taxonomy import (
+    get_metric, get_metric_reasoning, get_number_of_years_required,
+    get_all_derived_metrics, get_all_basic_metrics, get_easy_metrics
+)
 
 def get_years(data: dict) -> List[int]:
     return list(data.keys())
@@ -19,19 +22,20 @@ def represent_data_as_table(data: dict) -> str:
     
     table_str = ""
     
-    units: str = random.choice(["$", "$ thousands", "$ millions", "$ billions"])
+    units: str = "$"
+    #units: str = "random.choice(["$", "$ thousands", "$ millions", "$ billions"])"
     
-    table_str += units + " "
+    table_str += units + "|"
     for year in years[:-1]:
-        table_str += str(year) + " "
+        table_str += str(year) + "|"
     table_str += str(years[-1]) + "\n"
     
     all_line_items = list(data[years[0]].keys())
     
     for line_item in all_line_items:
-        table_str += line_item + " "
+        table_str += line_item + "|"
         for year in years[:-1]:
-            table_str += str(data[year][line_item]) + " "
+            table_str += str(data[year][line_item]) + "|"
         table_str += str(data[years[-1]][line_item]) + "\n"
     
     table_str = table_str.strip()
@@ -47,7 +51,7 @@ def generate_sample(data: dict, derived_metrics: List[str]) -> str:
     
     question_str: str = f"Calculate {choice_of_metric}"
     
-    if "Margin" in choice_of_metric or "Change" in choice_of_metric:
+    if "Margin" in choice_of_metric or "Change" in choice_of_metric or "Growth" in choice_of_metric:
         question_str += " (as a percentage)"
     
     if num_years_required > 1:
@@ -60,19 +64,20 @@ def generate_sample(data: dict, derived_metrics: List[str]) -> str:
     return {
         "context": represent_data_as_table(data),
         "question": question_str,
+        "reasoning": get_metric_reasoning(choice_of_metric, data, *years),
         "answer": answer_value
     }
     
 def main():
     # Define how many samples we are going to generate
     num_train_samples: int = 1000
-    num_test_samples: int = round(num_train_samples * 0.2)
+    num_test_samples: int = round(num_train_samples * 0.1)
     
     # Get all the basic metrics
     basic_metrics: List[str] = get_all_basic_metrics()
     
     # Get all the derived metrics
-    derived_metrics: List[str] = get_all_derived_metrics()
+    derived_metrics: List[str] = get_easy_metrics()
     
     # Store the generated samples
     train_samples: List[dict] = []
@@ -90,7 +95,7 @@ def main():
         
         data: dict = {
             year: {
-                line_item: random.randint(100000, 1000000)
+                line_item: random.randint(10, 1000) if line_item != "Tax Rate" else random.randint(1, 100) / 100
                 for line_item in basic_metrics
             }
             for year in years

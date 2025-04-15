@@ -60,24 +60,6 @@ class RewardEvaluator(ABC):
             Dictionary mapping reward function names to their scores
         """
         pass
-    
-def get_evaluator(name: str) -> RewardEvaluator:
-    """
-    Get the appropriate reward evaluator for a given task.
-    
-    Args:
-        name: Name of the task/dataset to get evaluator for
-        
-    Returns:
-        RewardEvaluator instance for the specified task
-        
-    Raises:
-        NotImplementedError: If evaluator for given task is not implemented
-    """
-    if name.lower() == "gsm8k":
-        return GSM8kEvaluator()
-    else:
-        raise NotImplementedError(f"No evaluator implemented for {name}")
 
 class FinanceEvaluator(RewardEvaluator):
     """
@@ -90,7 +72,7 @@ class FinanceEvaluator(RewardEvaluator):
         match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
         if match:
             try:
-                num_str = re.sub('[^0-9\.]', '', match.group(1).strip())
+                num_str = re.sub('[^0-9\.\-]', '', match.group(1).strip())
                 return round(float(num_str), 2)
             except ValueError:
                 return ""
@@ -307,3 +289,24 @@ class GSM8kEvaluator(RewardEvaluator):
             'soft_format': reward_scores[3].item(),
             'xml_count': reward_scores[4].item()
         }
+        
+    
+def get_evaluator(name: str) -> RewardEvaluator:
+    """
+    Get the appropriate reward evaluator for a given task.
+    
+    Args:
+        name: Name of the task/dataset to get evaluator for
+        
+    Returns:
+        RewardEvaluator instance for the specified task
+        
+    Raises:
+        NotImplementedError: If evaluator for given task is not implemented
+    """
+    if name.lower() == "gsm8k":
+        return GSM8kEvaluator()
+    elif name.lower() == "financial":
+        return FinanceEvaluator()
+    else:
+        raise NotImplementedError(f"No evaluator implemented for {name}")
