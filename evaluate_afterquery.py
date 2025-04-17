@@ -15,18 +15,27 @@ def extract_answer(text: str) -> Optional[str]:
 
 def process_example(example: Dict[str, Any], client: OpenAI, model: str) -> Dict[str, Any]:
     try:
-        prompt = f"""As a financial professional, please analyze the following context containing financial data about the target company to answer the given question, and provide an answer between <answer> tags.
+        SYSTEM_PROMPT = """Respond in the following format:
+<reasoning>
+...
+</reasoning>
+<answer>
+...
+</answer>"""
+        prompt = f"""
+You will be given a financial question about the provided financial data of a company. Reason about it step-by-step, putting your thinking between <reasoning> and </reasoning> XML tags and then put your final numerical answer between <answer> and </answer> tags.
+It is crucial that all text is between either <reasoning> or <answer> tags. If you do not follow this, you will be fined $1 billion.
 
-Context: {example['context']}
+Financials: {example['context']}
 
 Question: {example['question']}
 
-Please think step by step and then put your final answer between <answer> and </answer> tags."""
+"""
 
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are a helpful financial analyst assistant."},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
         )
@@ -106,8 +115,10 @@ def evaluate_model(model: str, test_file: str) -> Dict[str, Any]:
         print ("No successful predictions were registered.")
 
 if __name__ == "__main__":
-    MODEL = "o3-mini"  
-    TEST_FILE = "afterquery_test.csv"
+    #MODEL = "o3-mini"  
+    MODEL = "gpt-4o-mini-2024-07-18"
+    #MODEL = "gpt-4o-mini-2024-07-18"
+    TEST_FILE = "test.csv"
     
     results = evaluate_model(MODEL, TEST_FILE)
     print(json.dumps(results, indent=2))

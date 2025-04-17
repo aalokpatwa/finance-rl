@@ -6,41 +6,49 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import functools
 
-def extract_numerical_answer(text: str) -> Optional[float]:
+def extract_answer(text: str) -> Optional[str]:
     match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
     if match:
-        try:
-            num_str = match.group(1).strip().replace(',', '')
-            return round(float(num_str), 2)
-        except ValueError:
-            return None
+        answer = match.group(1).strip()
+        if any(char.isdigit() for char in answer):
+            answer = re.sub('[^0-9\.\-]', '', answer)
+        return answer
     return None
 
 def process_example(example_str: str, client: OpenAI, model: str) -> Dict[str, Any]:
     try:
         example = json.loads(example_str)
-        prompt = f"""As a financial professional, please analyze the following context containing financial data about the target company to answer the given question, and provide a numerical answer between <answer> tags, rounded to two decimals.
+        SYSTEM_PROMPT = """Respond in the following format:
+<reasoning>
+...
+</reasoning>
+<answer>
+...
+</answer>"""
+        prompt = f"""
+You will be given a financial question about the provided financial data of a company. Reason about it step-by-step, putting your thinking between <reasoning> and </reasoning> XML tags and then put your final numerical answer between <answer> and </answer> tags.
+It is crucial that all text is between either <reasoning> or <answer> tags. If you do not follow this, you will be fined $1 billion.
 
-Context: {example['context']}
+Financials: {example['context']}
 
 Question: {example['question']}
 
-Please think step by step and then put your final numerical answer between <answer> and </answer> tags."""
+"""
 
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are a helpful financial analyst assistant."},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
         )
 
-        prediction = extract_numerical_answer(response.choices[0].message.content)
+        prediction = extract_answer(response.choices[0].message.content)
         if prediction is not None:
             return {
                 "status": "success",
                 "prediction": prediction,
-                "ground_truth": float(example['answer']),
+                "ground_truth": example['answer'],
                 "id": example.get('id', 'unknown')
             }
         else:
@@ -97,10 +105,17 @@ def evaluate_model(model: str, test_file: str) -> Dict[str, Any]:
 
 
     if predictions:
-        predictions_np = np.array(predictions) 
-        ground_truths_np = np.array(ground_truths) 
+        correct = 0
+        for pred, gt in zip(predictions, ground_truths):
+            try:
+                pred_num = float(pred)
+                gt_num = float(gt)
+                if np.isclose(pred_num, gt_num, atol=0.5):
+                    correct += 1
+            except ValueError:
+                if str(pred).lower() == str(gt).lower():
+                    correct += 1
 
-        correct = np.isclose(predictions_np, ground_truths_np, atol=0.5).sum()
         accuracy = correct / len(predictions) if len(predictions) > 0 else 0.0
 
         final_results = { 
@@ -124,8 +139,10 @@ def evaluate_model(model: str, test_file: str) -> Dict[str, Any]:
     return final_results
 
 if __name__ == "__main__":
-    MODEL = "o3-mini"  
+    #MODEL = "o3-mini"  
+    #MODEL = "ft:gpt-4o-mini-2024-07-18:personal::BN5A693W" # trained on easy
+    #MODEL = "ft:gpt-4o-mini-2024-07-18:personal:initial-test:BN33mdlS" # trained on hard
+    MODEL = "gpt-4o-mini-2024-07-18" 
     TEST_FILE = "test.jsonl"
     
     results = evaluate_model(MODEL, TEST_FILE)
-    print(json.dumps(results, indent=2))
