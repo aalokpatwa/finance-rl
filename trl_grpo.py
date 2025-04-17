@@ -2,6 +2,10 @@
 #
 # See https://github.com/willccbb/verifiers for ongoing developments
 #
+
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 import re
 import torch
 from datasets import load_dataset, Dataset
@@ -9,6 +13,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import LoraConfig
 from trl import GRPOConfig, GRPOTrainer
 import evaluator
+import math
+from typing import Optional
+from typing import List
 
 # Load and prep dataset
 
@@ -24,10 +31,10 @@ Respond in the following format:
 """
 
 def get_finance_questions(split = "train") -> Dataset:
-    data = load_dataset('aalokpatwa/financial-reasoning-easy', split = split)
+    data = load_dataset('aalokpatwa/financial-reasoning', split = split)
     pre_prompt = (
         "You will be given some context regarding a company's financials, as well as a question about the company's financial situation. "
-        "You should reason step by step about the inputs you need for the question, and perform intermediate calculations. Then provide just your final answer.\n"
+        "You should reason step by step about the inputs you need for the question, and then output a single final answer.\n"
         "It is very important that you put your reasoning process inside <reasoning> tags and your final answer inside <answer> tags, like this:\n"
         "\n"
         "<reasoning>\n"
@@ -37,10 +44,8 @@ def get_finance_questions(split = "train") -> Dataset:
         "Your final answer here\n"
         "</answer>\n"
         "\n"
-        "All of your returned text should either be in the <reasoning> or <answer> tags - no text outside! Start each answer by immediately starting with <reasoning>.\n"
         "It is is extremely important you answer in this way - do not put any information or text outside of these tags! If your response does not contain <reasoning> and <answer>, you will be fined $1 billion.\n"
-        "You should perform intermediate calculations and put them in between <reasoning> tags. Then, only include a single-word final answer in between the <answer> tags.\n"
-        "Now, use the following financial context to answer the question.\n\n"
+        "Now, use the following financial data to answer the question.\n\n"
         "Financials:\n{context}\n\n"
         "Question: {question}\n\n"
     )
@@ -55,25 +60,30 @@ def get_finance_questions(split = "train") -> Dataset:
 
 dataset = get_finance_questions()
 
-def _extract_answer(self, text: str) -> str:
+def _extract_answer(text: str) -> Optional[str]:
     match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
     if match:
-        try:
-            num_str = re.sub('[^0-9\.\-]', '', match.group(1).strip())
-            return round(float(num_str), 2)
-        except ValueError:
-            return ""
+        answer = match.group(1).strip()
+        if any(char.isdigit() for char in answer):
+            answer = re.sub('[^0-9\.\-]', '', answer)
+        return answer
     return ""
 
-def _answer_format_reward(self, completions) -> List[float]:
+def _answer_format_reward(completions) -> List[float]:
     responses = [completion[0]['content'] for completion in completions]
-    predictions = [self._extract_answer(r) for r in responses]
+    predictions = [_extract_answer(r) for r in responses]
     return [0.5 if r != "" else 0.0 for r in predictions]
     
-def _correctness_reward(self, completions, answer) -> List[float]:
+def _correctness_reward(completions, answer) -> List[float]:
     responses = [completion[0]['content'] for completion in completions]
-    predictions = [self._extract_answer(r) for r in responses]
-    return [2.0 if r != "" and math.isclose(float(a), float(r), abs_tol=0.5) else 0.0 for r, a in zip(predictions, answer)]
+    predictions = [_extract_answer(r) for r in responses]
+    return [
+        2.0 if r != "" and (
+            isinstance(a, str) and r == a or
+            isinstance(a, (int, float)) and math.isclose(float(a), float(r), abs_tol=0.5)
+        ) else 0.0
+        for r, a in zip(predictions, answer)
+    ]
 
 #model_name = "meta-llama/Llama-3.2-1B-Instruct"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -106,6 +116,8 @@ training_args = GRPOConfig(
     max_grad_norm=0.1,
     report_to="wandb",
     log_on_each_node=False,
+    wandb_project="financial-reasoning",
+    wandb_entity="aalokpatwa"
 )
 peft_config = LoraConfig(
     r=16,
