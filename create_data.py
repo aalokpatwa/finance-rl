@@ -2,7 +2,7 @@ import random
 from typing import List, Tuple
 import json
 from data_taxonomy import (
-    get_metric, get_metric_reasoning, get_number_of_years_required,
+    get_formatted_metric, get_metric_reasoning, get_number_of_years_required,
     get_all_derived_metrics, get_all_basic_metrics, DifficultyLevel,
     METRIC_DEFINITIONS, QuestionType
 )
@@ -77,7 +77,7 @@ def generate_sample(data: dict, derived_metrics: List[Tuple[str, DifficultyLevel
     else:
         question_str += " Give your answer to one decimal place."
     
-    answer_value = get_metric(metric_choice, data, *years)
+    answer_value = get_formatted_metric(metric_choice, data, *years)
     
     return {
         "context": represent_data_as_table(data),

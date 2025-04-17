@@ -4,12 +4,14 @@
 #
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["VLLM_DTYPE"] = "float16" #####
 
 import re
 import torch
+import bitsandbytes as bnb
 from datasets import load_dataset, Dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig
 from trl import GRPOConfig, GRPOTrainer
 import evaluator
@@ -31,11 +33,10 @@ Respond in the following format:
 """
 
 def get_finance_questions(split = "train") -> Dataset:
-    data = load_dataset('aalokpatwa/financial-reasoning', split = split)
+    data = load_dataset('json', data_files='train.jsonl', split=split)
     pre_prompt = (
-        "You will be given some context regarding a company's financials, as well as a question about the company's financial situation. "
-        "You should reason step by step about the inputs you need for the question, and then output a single final answer.\n"
-        "It is very important that you put your reasoning process inside <reasoning> tags and your final answer inside <answer> tags, like this:\n"
+        "You will be given some context regarding a company's financials, and your task is to answer a question about the company. "
+        "Put your reasoning process between <reasoning> tags and your final answer between <answer> tags, like this:\n"
         "\n"
         "<reasoning>\n"
         "Your step-by-step reasoning process here\n"
@@ -59,6 +60,7 @@ def get_finance_questions(split = "train") -> Dataset:
     return data # type: ignore
 
 dataset = get_finance_questions()
+print (dataset)
 
 def _extract_answer(text: str) -> Optional[str]:
     match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
@@ -69,12 +71,12 @@ def _extract_answer(text: str) -> Optional[str]:
         return answer
     return ""
 
-def _answer_format_reward(completions) -> List[float]:
+def _answer_format_reward(completions, **kwargs) -> List[float]:
     responses = [completion[0]['content'] for completion in completions]
     predictions = [_extract_answer(r) for r in responses]
     return [0.5 if r != "" else 0.0 for r in predictions]
     
-def _correctness_reward(completions, answer) -> List[float]:
+def _correctness_reward(completions, answer, **kwargs) -> List[float]:
     responses = [completion[0]['content'] for completion in completions]
     predictions = [_extract_answer(r) for r in responses]
     return [
@@ -85,7 +87,7 @@ def _correctness_reward(completions, answer) -> List[float]:
         for r, a in zip(predictions, answer)
     ]
 
-#model_name = "meta-llama/Llama-3.2-1B-Instruct"
+#model_name = "meta-llama/Llama-3.2-1B"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 
 if "Llama" in model_name:
@@ -99,25 +101,24 @@ training_args = GRPOConfig(
     output_dir=output_dir,
     run_name=run_name,
     learning_rate=5e-6,
+    optim="adamw_torch_fused", ######
     adam_beta1 = 0.9,
     adam_beta2 = 0.99,
     weight_decay = 0.1,
     warmup_ratio = 0.1,
     lr_scheduler_type='cosine',
     logging_steps=1,
-    bf16=True,
-    per_device_train_batch_size=1,
+    fp16=True,
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=4,
     num_generations=8,
-    max_prompt_length=1024,
-    max_completion_length=2048,
+    max_prompt_length=512,
+    max_completion_length=768,
     num_train_epochs=1,
     save_steps=100,
-    max_grad_norm=0.1,
+    max_grad_norm=0,
     report_to="wandb",
     log_on_each_node=False,
-    wandb_project="financial-reasoning",
-    wandb_entity="aalokpatwa"
 )
 peft_config = LoraConfig(
     r=16,
@@ -126,12 +127,15 @@ peft_config = LoraConfig(
     task_type="CAUSAL_LM",
     lora_dropout=0.05,
 )
+# Create the BitsAndBytesConfig for 8-bit quantization
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype=torch.bfloat16,
-    attn_implementation="flash_attention_2",
-    device_map=None
-).to("cuda")
+    torch_dtype=torch.float16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
         
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token

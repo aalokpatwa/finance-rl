@@ -564,7 +564,7 @@ METRIC_DEFINITIONS: Dict[str, MetricDefinition] = {
     **ComparativeMetrics.get_definitions(),
 }
 
-def get_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> Union[float, str]:
+def get_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> Union[str, float]:
     """
     Get the value of a metric for a given year.
     - If 'metric_name' is a basic metric, returns data[year][metric_name].
@@ -582,7 +582,15 @@ def get_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> Un
     if definition.metric_type == MetricType.BASIC:
         return data[year][metric_name]
     
-    return round(definition.formula(data, year, *args), 1) if definition.question_type == QuestionType.CALCULATE else definition.formula(data, year, *args)
+    return definition.formula(data, year, *args)
+
+def get_formatted_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> str:
+    metric_value: Union[str, float] = get_metric(metric_name, data, year, *args)
+    
+    if isinstance(metric_value, float) or isinstance(metric_value, int):
+        metric_value = str(round(metric_value, 1))
+    
+    return metric_value
 
 def get_metric_reasoning(metric_name: str, data: dict, year: Union[int, str], *args) -> str:
     """Get the reasoning for how a metric was calculated."""
@@ -591,7 +599,7 @@ def get_metric_reasoning(metric_name: str, data: dict, year: Union[int, str], *a
     if definition.reasoning is None or definition.metric_type == MetricType.BASIC:
         return f"\n{year} {metric_name} is {get_metric(metric_name, data, year, *args)}{definition.units}."
     
-    return "\n" + definition.reasoning(data, year, *args) + f"\nTherefore, {metric_name} is {get_metric(metric_name, data, year, *args)}{definition.units}."
+    return "\n" + definition.reasoning(data, year, *args) + f"\nTherefore, {metric_name} is {get_formatted_metric(metric_name, data, year, *args)}{definition.units}."
 
 def get_all_derived_metrics() -> List[Tuple[str, DifficultyLevel]]:
     """Returns a list of all the names and difficulty levels of derived metrics."""
