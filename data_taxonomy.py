@@ -587,6 +587,7 @@ def get_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> Un
 def get_formatted_metric(metric_name: str, data: dict, year: Union[int, str], *args) -> str:
     metric_value: Union[str, float] = get_metric(metric_name, data, year, *args)
     
+    
     if isinstance(metric_value, float) or isinstance(metric_value, int):
         metric_value = str(round(metric_value, 1))
     

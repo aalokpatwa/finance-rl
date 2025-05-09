@@ -68,14 +68,13 @@ class FinanceEvaluator(RewardEvaluator):
     def __init__(self):
         self.num_reward_functions = 4
         
-    def _extract_answer(self, text: str) -> str:
+    def _extract_answer(text: str) -> Optional[str]:
         match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
         if match:
-            try:
-                num_str = re.sub('[^0-9\.\-]', '', match.group(1).strip())
-                return round(float(num_str), 2)
-            except ValueError:
-                return ""
+            answer = match.group(1).strip()
+            if any(char.isdigit() for char in answer):
+                answer = re.sub('[^0-9x', '', answer)
+            return answer
         return ""
     
     def _soft_format_reward(self, completions) -> List[float]:

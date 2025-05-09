@@ -35,7 +35,7 @@ Respond in the following format:
 def get_finance_questions(split = "train") -> Dataset:
     data = load_dataset('json', data_files='train.jsonl', split=split)
     pre_prompt = (
-        "You will be given some context regarding a company's financials, and your task is to answer a question about the company. "
+        "You will be given some context regarding a company's financials, and your task is to answer a question about the company.\n"
         "Put your reasoning process between <reasoning> tags and your final answer between <answer> tags, like this:\n"
         "\n"
         "<reasoning>\n"
@@ -60,14 +60,13 @@ def get_finance_questions(split = "train") -> Dataset:
     return data # type: ignore
 
 dataset = get_finance_questions()
-print (dataset)
 
 def _extract_answer(text: str) -> Optional[str]:
     match = re.search(r"<answer>([\s\S]*?)<\/answer>", text)
     if match:
         answer = match.group(1).strip()
         if any(char.isdigit() for char in answer):
-            answer = re.sub('[^0-9\.\-]', '', answer)
+            answer = re.sub('[^0-9x', '', answer)
         return answer
     return ""
 
@@ -79,13 +78,36 @@ def _answer_format_reward(completions, **kwargs) -> List[float]:
 def _correctness_reward(completions, answer, **kwargs) -> List[float]:
     responses = [completion[0]['content'] for completion in completions]
     predictions = [_extract_answer(r) for r in responses]
-    return [
-        2.0 if r != "" and (
-            isinstance(a, str) and r == a or
-            isinstance(a, (int, float)) and math.isclose(float(a), float(r), abs_tol=0.5)
-        ) else 0.0
-        for r, a in zip(predictions, answer)
-    ]
+    rewards = []
+    for r, a in zip(predictions, answer):
+        if r != "":
+            if isinstance(a, str) and a.replace('.', '', 1).replace('-', '', 1).isdigit():
+                try:
+                    if math.isclose(float(a), float(r), abs_tol=0.5):
+                        rewards.append(2.0)
+                    else:
+                        rewards.append(0.0)
+                except ValueError:
+                    rewards.append(0.0)
+            elif isinstance(a, str):
+                if a.lower() == r.lower():
+                    rewards.append(2.0)
+                else:
+                    rewards.append(0.0)
+            elif isinstance(a, float):
+                try:
+                    if math.isclose(a, float(r), abs_tol=0.5):
+                        rewards.append(2.0)
+                    else:
+                        rewards.append(0.0)
+                except ValueError:
+                    rewards.append(0.0)
+            else:
+                rewards.append(0.0)
+        else:
+            # Were not able to extract rewards
+            rewards.append(0.0)
+    return rewards
 
 #model_name = "meta-llama/Llama-3.2-1B"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"

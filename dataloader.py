@@ -184,7 +184,7 @@ def extract_hash_answer(text: str) -> str | None:
     return text.split("####")[1].strip()
 
 def build_finance_dataloaders() -> Tuple[FinanceLoader, FinanceLoader]: 
-    dataset = load_dataset('aalokpatwa/financial-reasoning-easy', split='train')
+    dataset = load_dataset('aalokpatwa/financial-reasoning', split='train')
 
     contexts = []
     questions = []

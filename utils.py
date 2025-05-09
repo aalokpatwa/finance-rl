@@ -17,8 +17,6 @@ def clean_spaces_preserve_newlines(text):
     cleaned_lines = [" ".join(re.split(r"\s+", line)).strip() for line in lines]  # Remove extra spaces in each line
     return "\n".join(cleaned_lines)  # Join the lines back with newlines
 
-
-
 def seed_everything(seed: int) -> None:
     """
     Set random seed for reproducibility across multiple libraries.
